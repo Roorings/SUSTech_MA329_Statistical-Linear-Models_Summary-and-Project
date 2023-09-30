@@ -1,0 +1,249 @@
+---
+title: "MA329_PROJ"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#  some questions to lm???
+
+1. use lm() of full model to see the p-value (or use plot() to see if each factor have some multidimensional connection?)(what about some have intersection?) & stepwise/other methods to find the reduced one(then test whether the reduced model is better)
+
+2. high leverage pts(delete or not)
+test normality/ independence/ linearity/ homoscedasticity. (parallel or progressive relationship)
+
+3. the difference between ANOVA & summary
+
+4. data visualization (without model, see the outline of data?)
+
+5. corrective methods: delecting observations, transforming variables, adding or deleting variables, using another regression approach...?
+
+
+#  import packages
+```{r, warning = FALSE}
+library(readxl)
+library(MASS)
+library(car)
+library(base)
+```
+
+
+#  inport data
+```{r}
+data <- read_excel("data.xlsx")
+```
+
+#  missing points detection
+```{r}
+na_data = is.na(data)
+table(na_data)
+```
+no missing pts.
+
+#  boxplot of all factors(maybe we don't need to do this)
+```{r}
+par(mfrow=c(2,5))
+boxplot(data$Aids, main = "Aids")
+boxplot(data$agriculture, main = "Agriculture")
+boxplot(data$fertility,main = "Fertility")
+boxplot(data$GovSpend ,main = "GovSprend")
+boxplot(data$infantMortality ,main = "infantMortality")
+boxplot(data$sanitation ,main = "sanitation")
+boxplot(data$smoke_F ,main = "smoke_F")
+boxplot(data$smoke_M ,main = "smoke_M")
+boxplot(data$urbanPop ,main = "urbanPop")
+```
+We can see some outliers?
+
+#  summary of all factor, to see their min max and mean etc.
+```{r}
+summary(data)
+
+```
+what can we find?
+
+#  see the full model and find the significant one.
+```{r}
+attach(data)
+fullmodel <- lm(Aids ~ (agriculture + fertility + GovSpend + infantMortality + sanitation + smoke_F + smoke_M + urbanPop ))
+summary(fullmodel)
+anova(fullmodel)
+aov(fullmodel)
+```
+as p-value is very small, so we reject the null H0... so the model is meaningful, aids and other factors have connection.
+
+#  see the scatterplotmatrix but it's too big
+```{r}
+data_num <- data[c("agriculture", "fertility", "GovSpend", "infantMortality", "sanitation", "smoke_F", "smoke_M", "urbanPop")]
+car::scatterplotMatrix(data_num)
+```
+
+it's too much that maybe we don't need to see this test?
+
+#  full model's test
+```{r}
+round(cor(data_num),4)
+full_matrix <- model.matrix(fullmodel)[,-1]
+e <- eigen(t(full_matrix) %*% full_matrix)
+e$val
+sqrt(e$val[1] / e$val)
+#round(vif(full_matrix),3)
+library(ggcorrplot)
+cor_heart <- cor(data[,2:10])
+cor_heart
+ggcorrplot(cor_heart,lab = F)
+plot(fit2)
+```
+
+
+
+#  use stepwise to determine the significant factors
+```{r}
+stepwisemethod <- as.data.frame(data[, c("Aids", "agriculture", "fertility", "GovSpend", "infantMortality", "sanitation", "smoke_F", "smoke_M", "urbanPop")])
+fit <- lm(Aids ~ (agriculture + fertility + GovSpend + infantMortality + sanitation + smoke_F + smoke_M + urbanPop ))
+stepAIC(fit, direction = "both")
+```
+then we can get this: lm(formula = Aids ~ agriculture + infantMortality + urbanPop), also fit the full model's significancity.
+
+
+#  test VIF
+```{r}
+reducedmodel <- lm(log(Aids) ~ agriculture + fertility + urbanPop)
+summary(reducedmodel)
+library(faraway)
+red_matrix <- model.matrix(reducedmodel)[,-1]
+vif(red_matrix)
+```
+all are not larger than 10.
+
+
+#  test normality
+```{r}
+qqPlot(reducedmodel, labels=row.names(data$Country), id.method="identify",simulate=TRUE, main="Q-Q Plot")
+#states["80",]
+#fitted(fit)["80"]
+#residuals(fit)["80"]
+par(mfrow = c(1,2))
+qqPlot(fit, labels=row.names(data$Country), id.method="identify",simulate=TRUE, main="Q-Q Plot of full model")
+logfit <- lm(log(Aids) ~ (agriculture + fertility + GovSpend + infantMortality + sanitation + smoke_F + smoke_M + urbanPop ))
+qqPlot(logfit, labels=row.names(data$Country), id.method="identify",simulate=TRUE, main="Q-Q Plot of LOG transformation")
+#states["80",]
+#fitted(fit)["80"]
+#residuals(fit)["80"]
+summary(logfit)
+```
+
+#  test independence of errors
+```{r}
+durbinWatsonTest(fit)
+```
+
+#  test linearity
+```{r}
+crPlots(fit)
+```
+
+#  test homoscedasticity
+```{r}
+ncvTest(fit)
+spreadLevelPlot(fit)
+```
+
+#  outlier
+```{r}
+outlierTest(fit)
+```
+
+
+QQPlot
+```{r}
+par(mfrow = c(1,2))
+logreducedmodel <- lm(log(Aids) ~ agriculture + infantMortality + urbanPop)
+qqPlot(fullmodel, labels=row.names(data$Country), id.method="identify",simulate=TRUE, main="Q-Q Plot of model")
+qqPlot(logfit, labels=row.names(data$Country), id.method="identify",simulate=TRUE, main="Q-Q Plot of reduced model with LOG transformation")
+```
+
+```{r}
+ncvTest(fit2)
+spreadLevelPlot(logreducedmodel)
+durbinWatsonTest(fit2)
+outlierTest(fit2)
+summary(fit2)
+```
+
+```{r}
+library(car)
+attach(data)
+par(mfrow = c(3,3))
+scatter.smooth(rstudent(fit2) ~ agriculture, col = "grey", las = 1, ylab = "Studendized residuals")
+scatter.smooth(rstudent(fit2) ~ fertility, col = "grey", las = 1, ylab = "Studendized residuals")
+scatter.smooth(rstudent(fit2) ~ urbanPop, col = "grey", las = 1, ylab = "Studendized residuals")
+```
+
+```{r}
+summary(powerTransform(data$Aids))
+```
+
+
+```{r}
+summary(logreducedmodel)
+```
+
+
+
+
+
+
+
+
+
+
+```{r}
+stepwisemethod <- as.data.frame(data[, c("Aids", "agriculture", "fertility", "GovSpend", "smoke_F", "smoke_M", "urbanPop")])
+fit <- lm(log(Aids) ~ (agriculture + fertility + GovSpend + smoke_F + smoke_M + urbanPop ))
+stepAIC(fit, direction = "both")
+fit2 <-lm(formula = log(Aids) ~ agriculture + fertility + urbanPop)
+summary(fit2)
+```
+
+```{r}
+library(flextable)
+hist(data$Aids)
+A <- data.frame(data[6,])
+a <- rbind(A,data[73,])
+a
+
+data[order(data$Aids, decreasing = TRUE),]
+```
+
+```{r}
+data_low <- read_excel("data_low.xlsx")
+data_high <- read_excel("data_high.xlsx")
+par(mfrow = c(1,2))
+boxplot(data_low$Aids, main = "low GovSpend countries' aid's rate")
+boxplot(data_high$Aids, main = "high GovSpend countries' aid's rate")
+```
+
+```{r}
+attach(data_high)
+stepwisemethod <- as.data.frame(data_low[, c("Aids", "agriculture", "fertility", "GovSpend", "infantMortality", "sanitation", "smoke_F", "smoke_M", "urbanPop")])
+fit <- lm(log(Aids) ~ (agriculture + fertility + GovSpend + infantMortality + sanitation + smoke_F + smoke_M + urbanPop ))
+stepAIC(fit, direction = "both")
+
+```
+
+
+
+```{r}
+data_new <- read_excel("data_new.xlsx")
+library(lmPerm)
+library(multcomp)
+attach(data_new)
+exang <- as.factor(GovSpendDifference)
+fit=aovp(Aids~GovSpendDifference, perm="Prob", iter = 500000000)
+summary(fit)
+```
